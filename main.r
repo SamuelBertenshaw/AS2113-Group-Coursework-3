@@ -13,7 +13,7 @@ errors <- data.frame(
 )
 
 # Allowed smoking statuses
-valid_smoking <- c("Smoker", "Non-smoker")
+valid_smoking <- c("Smoker", "Non-smoker", "Ex-smoker")
 
 for (i in 1:nrow(error_checking)) {
   
@@ -309,3 +309,4 @@ settle_matured_policies <- function(year, file = "pholders.csv") {
   # Return a summary of settled policies
   list(success = TRUE, settled = settled)
 }
+
