@@ -2,68 +2,75 @@
 # Part A: Detecting Errors #
 ############################
 
-# Read in raw data
-error_checking <- read.csv("pholdersraw.csv", stringsAsFactors = FALSE)
-
-# Create empty error log
-errors <- data.frame(
-  policy.number = character(),
-  error = character(),
-  stringsAsFactors = FALSE
-)
-
-# Allowed smoking statuses
-valid_smoking <- c("Smoker", "Non-smoker", "Ex-smoker")
-
-for (i in 1:nrow(error_checking)) {
+check_policy_errors <- function(file_path, write_csv = TRUE, output_file = "policy_errors.csv") {
   
-  pol <- error_checking[i, ]
   
-  if (pol$age.at.inception < 65 || pol$age.at.inception > 75) {
-    errors[nrow(errors) + 1, ] <-
-      list(pol$policy.number, "Invalid age at inception")
-  }
+  policy_data <- read.csv(file_path, stringsAsFactors = FALSE)
   
-  if (pol$age.at.inception + pol$term > 90) {
-    errors[nrow(errors) + 1, ] <-
-      list(pol$policy.number, "Policy term exceeds age 90 limit")
-  }
+  # Create empty error data frame
+  errors <- data.frame(
+    policy.number = character(),
+    error = character(),
+    stringsAsFactors = FALSE
+  )
   
-  if (pol$inception.year > 2026) {
-    errors[nrow(errors) + 1, ] <-
-      list(pol$policy.number, "Inception year after data creation date")
-  }
+  # Allowed smoking statuses
+  valid_smoking <- c("Smoker", "Non-smoker")
   
-  if (!(pol$smoker.status %in% valid_smoking)) {
-    errors[nrow(errors) + 1, ] <-
-      list(pol$policy.number, "Invalid smoking status")
-  }
-  
-  if (pol$exit == "Death" && pol$year.of.exit >= 2026) {
-    errors[nrow(errors) + 1, ] <-
-      list(pol$policy.number, "Death recorded in 2026 or later")
-  }
-  
-  if (pol$exit == "End") {
-    expected_end <- pol$inception.year + pol$term - 1
-    if (pol$year.of.exit != expected_end) {
-      errors[nrow(errors) + 1, ] <-
-        list(pol$policy.number, "Policy ended before full term completed")
+  # Loop through each policy
+  for (i in 1:nrow(policy_data)) {
+    
+    pol <- policy_data[i, ]
+    
+    # Age check
+    if (pol$age.at.inception < 65 || pol$age.at.inception > 75) {
+      errors[nrow(errors) + 1, ] <- list(pol$policy.number, "Invalid age at inception")
     }
-  }
+    
+    # Term check
+    if (pol$age.at.inception + pol$term > 90) {
+      errors[nrow(errors) + 1, ] <- list(pol$policy.number, "Policy term exceeds age 90 limit")
+    }
+    
+    # Inception year check
+    if (pol$inception.year > 2026) {
+      errors[nrow(errors) + 1, ] <- list(pol$policy.number, "Inception year after data creation date")
+    }
+    
+    # Smoking status check
+    if (!(pol$smoker.status %in% valid_smoking)) {
+      errors[nrow(errors) + 1, ] <- list(pol$policy.number, "Invalid smoking status")
+    }
+    
+    # Death in 2026 or later
+    if (pol$exit == "Death" && pol$year.of.exit >= 2026) {
+      errors[nrow(errors) + 1, ] <- list(pol$policy.number, "Death recorded in 2026 or later")
+    }
+    
+    # Policy ended before full term
+    if (pol$exit == "End") {
+      expected_end <- pol$inception.year + pol$term - 1
+      if (pol$year.of.exit != expected_end) {
+        errors[nrow(errors) + 1, ] <- list(pol$policy.number, "Policy ended before full term completed")
+      }
+    }
+    
+    # Exit year present but exit type missing
+    if (pol$exit == "" && !is.na(pol$year.of.exit)) {
+      errors[nrow(errors) + 1, ] <- list(pol$policy.number, "Exit year present but exit type missing")
+    }
+    
+  } 
   
-  if (pol$exit == "" && !is.na(pol$year.of.exit)) {
-    errors[nrow(errors) + 1, ] <-
-      list(pol$policy.number, "Exit year present but exit type missing")
-  }
+  # Name columns of the csv file
+  colnames(errors) <- c("policy_number", "error_description")
+  
+  # Writes the csv
+  write.csv(errors, output_file, row.names = FALSE)
+  
+  # Return error data frame in the terminal for easy viewing
+  return(errors)
 }
-
-# Name columns 
-colnames(errors) <- c("policy_number", "error_description")
-
-# Write error csv file
-write.csv(errors, "policy_errors.csv", row.names = FALSE)
-
 ####################################
 # Part B: Policyholder Maintenance #
 ####################################
@@ -309,4 +316,5 @@ settle_matured_policies <- function(year, file = "pholders.csv") {
   # Return a summary of settled policies
   list(success = TRUE, settled = settled)
 }
+
 
