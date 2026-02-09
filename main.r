@@ -71,6 +71,7 @@ check_policy_errors <- function(file_path, write_csv = TRUE, output_file = "poli
   # Return error data frame in the terminal for easy viewing
   return(errors)
 }
+
 ####################################
 # Part B: Policyholder Maintenance #
 ####################################
@@ -316,5 +317,183 @@ settle_matured_policies <- function(year, file = "pholders.csv") {
   # Return a summary of settled policies
   list(success = TRUE, settled = settled)
 }
+
+#################################
+# Part C: Summarising the Data  #
+#################################
+
+# Function to calculate total premiums paid during a given year, categorised:      
+# overall, by sex, by smoker status and by both sex and smoker status
+premium_summary <- function(year, file = "pholders.csv") {
+  
+  # Read policyholder file
+  df <- read.csv(file, stringsAsFactors = FALSE)
+  
+  # Ensure character fields are correctly typed
+  df$policy.number <- as.character(df$policy.number)
+  
+  # Identify policies active at the start of the year
+  active <- logical(nrow(df))
+  for (i in seq_len(nrow(df))) {
+    active[i] <- .is_active_at_year(df[i, ], year)
+  }
+  
+  df_active <- df[active, ]
+  
+  # Create empty result data frame
+  result <- data.frame(
+    category = character(),
+    total.premium = numeric(),
+    stringsAsFactors = FALSE
+  )
+  
+  # Summarises total premiums by all policies
+  result[nrow(result) + 1, ] <-
+    list("All policies", sum(df_active$premium))
+  
+  # Summarises total premiums by sex
+  for (s in c("Male", "Female")) {
+    total <- sum(df_active$premium[df_active$sex == s])
+    result[nrow(result) + 1, ] <-
+      list(paste("Sex:", s), total)
+  }
+  
+  # Summarises total premiums by smoker status
+  for (sm in c("Smoker", "Non-smoker", "Ex-smoker")) {
+    total <- sum(df_active$premium[df_active$smoker.status == sm])
+    result[nrow(result) + 1, ] <-
+      list(paste("Smoker status:", sm), total)
+  }
+  
+  # Summarises total premiums by both sex and smoker status
+  for (s in c("Male", "Female")) {
+    for (sm in c("Smoker", "Non-smoker", "Ex-smoker")) {
+      total <- sum(df_active$premium[
+        df_active$sex == s &
+          df_active$smoker.status == sm
+      ])
+      result[nrow(result) + 1, ] <-
+        list(paste(s, "-", sm), total)
+    }
+  }
+  
+  result
+}
+
+# Function to calculate total death benefits during a given year, categorised:      
+# overall, by sex, by smoker status and by both sex and smoker status
+death_benefit_summary <- function(year, file = "pholders.csv") {
+  
+  # Read policyholder file
+  df <- read.csv(file, stringsAsFactors = FALSE)
+  
+  # Identify deaths occurring in the given year
+  deaths <- df$exit == "Died" & df$year.of.exit == year
+  df_deaths <- df[deaths, ]
+  
+  # Create empty result data frame
+  result <- data.frame(
+    category = character(),
+    total.death.benefit = numeric(),
+    stringsAsFactors = FALSE
+  )
+  
+  # Summarises total death benefits by all deaths
+  result[nrow(result) + 1, ] <-
+    list("All policies", sum(df_deaths$sum.assured))
+  
+  # Summarises total death benefits by sex
+  for (s in c("Male", "Female")) {
+    total <- sum(df_deaths$sum.assured[df_deaths$sex == s])
+    result[nrow(result) + 1, ] <-
+      list(paste("Sex:", s), total)
+  }
+  
+  # Summarises total death benefits by smoker status
+  for (sm in c("Smoker", "Non-smoker", "Ex-smoker")) {
+    total <- sum(df_deaths$sum.assured[df_deaths$smoker.status == sm])
+    result[nrow(result) + 1, ] <-
+      list(paste("Smoker status:", sm), total)
+  }
+  
+  # Summarises total death benefits by both sex and smoker status
+  for (s in c("Male", "Female")) {
+    for (sm in c("Smoker", "Non-smoker", "Ex-smoker")) {
+      total <- sum(df_deaths$sum.assured[
+        df_deaths$sex == s &
+          df_deaths$smoker.status == sm
+      ])
+      result[nrow(result) + 1, ] <-
+        list(paste(s, "-", sm), total)
+    }
+  }
+  
+  result
+}
+
+# Function to calculate individual policy cashflows and present values     
+policy_cashflows <- function(policy.number, year, interest.rate,
+                             file = "pholders.csv") {
+  
+  # Read policyholder file
+  df <- read.csv(file, stringsAsFactors = FALSE)
+  df$policy.number <- as.character(df$policy.number)
+  policy.number <- as.character(policy.number)
+  
+  # Locate the policy
+  idx <- which(df$policy.number == policy.number)
+  if (length(idx) == 0)
+    return(list(success = FALSE, error = "Policy not found"))
+  
+  pol <- df[idx, ]
+  
+  # Determine final year premiums are paid
+  final_year <- year
+  if (!is.na(pol$year.of.exit) && pol$year.of.exit <= year)
+    final_year <- pol$year.of.exit
+  
+  # Years premiums are paid 
+  premium_years <- pol$inception.year:final_year
+  
+  # Nominal premium total
+  nominal_premium <- length(premium_years) * pol$premium
+  
+  # Present value of premiums at end of year
+  pv_premium <- 0
+  for (y in premium_years) {
+    years_to_accumulate <- year - y + 1
+    pv_premium <- pv_premium +
+      pol$premium * (1 + interest.rate)^years_to_accumulate
+  }
+  
+  # Nominal benefit
+  nominal_benefit <- 0
+  pv_benefit <- 0
+  
+  # If death occurred on or before the given year
+  if (pol$exit == "Died" && pol$year.of.exit <= year) {
+    nominal_benefit <- pol$sum.assured
+    
+    # Accumulate from midway through year of death
+    years_to_accumulate <- year - pol$year.of.exit + 0.5
+    pv_benefit <- pol$sum.assured *
+      (1 + interest.rate)^years_to_accumulate
+  }
+  
+  # Return results as a small data frame
+  data.frame(
+    quantity = c("Nominal premium",
+                 "Nominal benefit",
+                 "Present value of premiums",
+                 "Present value of benefits"),
+    amount = c(nominal_premium,
+               nominal_benefit,
+               pv_premium,
+               pv_benefit),
+    stringsAsFactors = FALSE
+  )
+}
+
+
 
 
