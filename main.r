@@ -1,80 +1,73 @@
-############################
-# Part A: Detecting Errors #
-############################
+#### Part A: Detecting Errors ####
 
-check_policy_errors <- function(file_path, write_csv = TRUE, output_file = "policy_errors.csv") {
+
+check_policy_errors <- function(raw_file, output_file = "policy_errors.csv") {
   
+  # Load the raw policies
+  policies <- read.csv(raw_file, stringsAsFactors = FALSE)
   
-  policy_data <- read.csv(file_path, stringsAsFactors = FALSE)
+  data_year <- 2026  # Date of data
+  valid_smokers <- c("Non-smoker", "Smoker", "Ex-smoker")
+  mandatory_fields <- c("sex", "smoker.status", "age.at.inception", "inception.year", "term", "sum.assured")
   
-  # Create empty error data frame
-  errors <- data.frame(
-    policy.number = character(),
-    error = character(),
-    stringsAsFactors = FALSE
-  )
+  # Create empty dataframe to store errors
+  policy_errors <- data.frame(policy.number = character(0), error_description = character(0), stringsAsFactors = FALSE)
   
-  # Allowed smoking statuses
-  valid_smoking <- c("Smoker", "Non-smoker", "Ex-smoker")
-  
-  # Loop through each policy
-  for (i in 1:nrow(policy_data)) {
-    
-    pol <- policy_data[i, ]
-    
-    # Age check
-    if (pol$age.at.inception < 65 || pol$age.at.inception > 75) {
-      errors[nrow(errors) + 1, ] <- list(pol$policy.number, "Invalid age at inception")
+  # Function to append errors to the data frame
+  append_errors <- function(df, errors, message) {
+    if(length(errors) > 0) {
+      new_errors <- data.frame(policy.number = policies$policy.number[errors],
+                               error_description = message,
+                               stringsAsFactors = FALSE)
+      df <- rbind(df, new_errors)
     }
-    
-    # Term check
-    if (pol$age.at.inception + pol$term > 90) {
-      errors[nrow(errors) + 1, ] <- list(pol$policy.number, "Policy term exceeds age 90 limit")
-    }
-    
-    # Inception year check
-    if (pol$inception.year > 2026) {
-      errors[nrow(errors) + 1, ] <- list(pol$policy.number, "Inception year after data creation date")
-    }
-    
-    # Smoking status check
-    if (!(pol$smoker.status %in% valid_smoking)) {
-      errors[nrow(errors) + 1, ] <- list(pol$policy.number, "Invalid smoking status")
-    }
-    
-    # Death in 2026 or later
-    if (pol$exit == "Death" && pol$year.of.exit >= 2026) {
-      errors[nrow(errors) + 1, ] <- list(pol$policy.number, "Death recorded in 2026 or later")
-    }
-    
-    # Policy ended before full term
-    if (pol$exit == "End") {
-      expected_end <- pol$inception.year + pol$term - 1
-      if (pol$year.of.exit != expected_end) {
-        errors[nrow(errors) + 1, ] <- list(pol$policy.number, "Policy ended before full term completed")
-      }
-    }
-    
-    # Exit year present but exit type missing
-    if (pol$exit == "" && !is.na(pol$year.of.exit)) {
-      errors[nrow(errors) + 1, ] <- list(pol$policy.number, "Exit year present but exit type missing")
-    }
-    
-  } 
+    df
+  }
   
-  # Name columns of the csv file
-  colnames(errors) <- c("policy_number", "error_description")
+  # Age at inception must be between 65 and 75
+  policy_errors <- append_errors(policy_errors, which(policies$age.at.inception < 65), 
+                                 "Age at inception too young (<65)")
+  policy_errors <- append_errors(policy_errors, which(policies$age.at.inception > 75), 
+                                 "Age at inception too old (>75)")
   
-  # Writes the csv
-  write.csv(errors, output_file, row.names = FALSE)
+  # Term cannot cover someone in their 90th year
+  policy_errors <- append_errors(policy_errors, which(policies$age.at.inception + policies$term > 89), 
+                                 "Term too long (would cover 90th year or beyond)")
   
-  # Return error data frame in the terminal for easy viewing
-  return(errors)
+  # Invalid smoker status
+  policy_errors <- append_errors(policy_errors, which(!policies$smoker.status %in% valid_smokers), 
+                                 "Invalid smoker status")
+  
+  # Exit in 2026 (cannot happen)
+  policy_errors <- append_errors(policy_errors, which(!is.na(policies$year.of.exit) & 
+                                                        policies$year.of.exit == data_year),
+                                 "Policy cannot have exited in 2026")
+  
+  # Policy ends before it starts
+  policy_errors <- append_errors(policy_errors, which(!is.na(policies$year.of.exit) & 
+                                                        policies$year.of.exit < policies$inception.year),
+                                 "Policy ends before it starts")
+  
+  # 6. Policy inception in the future
+  policy_errors <- append_errors(policy_errors, which(policies$inception.year > data_year),
+                                 "Policy inception in the future")
+  
+  # 7. Policy ends before term completed
+  early_end <- which(policies$exit == "End" & !is.na(policies$year.of.exit) &
+                       (policies$year.of.exit - policies$inception.year + 1) < policies$term)
+  policy_errors <- append_errors(policy_errors, early_end, "Policy ended before term completed")
+  
+  
+  # Save to CSV
+  write.csv(policy_errors, output_file, row.names = FALSE)
+  colnames(policy_errors) <- c("Policy Number","Error Description")
+  return(policy_errors)
 }
 
-####################################
-# Part B: Policyholder Maintenance #
-####################################
+
+
+#### Part B: Policyholder Maintenance ####
+
 
 # Function to ensure names, sex and smoker is stored in a consistent format
 .capitalise_first <- function(x) {
@@ -294,11 +287,11 @@ settle_matured_policies <- function(year, file = "pholders.csv") {
   list(success = TRUE, settled = settled)
 }
 
-#################################
-# Part C: Summarising the Data  #
-#################################
 
-premium_summary <- function(year, file = "pholders.csv") {
+#### Part C: Summarising the Data  ####
+
+
+premium_summary <- function(year, file) {
   
   df <- read.csv(file, stringsAsFactors = FALSE)
   df$policy.number <- as.character(df$policy.number)
@@ -346,7 +339,7 @@ premium_summary <- function(year, file = "pholders.csv") {
   result
 }
 
-death_benefit_summary <- function(year, file = "pholders.csv") {
+death_benefit_summary <- function(year, file) {
   
   df <- read.csv(file, stringsAsFactors = FALSE)
   
@@ -389,7 +382,7 @@ death_benefit_summary <- function(year, file = "pholders.csv") {
 }
 
 policy_cashflows <- function(policy.number, year, interest.rate,
-                             file = "pholders.csv") {
+                             file) {
   
   df <- read.csv(file, stringsAsFactors = FALSE)
   df$policy.number <- as.character(df$policy.number)
@@ -432,6 +425,60 @@ policy_cashflows <- function(policy.number, year, interest.rate,
                pv_benefit),
     stringsAsFactors = FALSE
   )
+}
+
+
+
+#### Part D: Simulating Active Policies in a year ####
+
+simulate_deaths <- function(sim_year, policy_file) {
+
+  policies <- read.csv(policy_file, stringsAsFactors = FALSE)
+  mortality_table <- read.csv("mortrates.csv", stringsAsFactors = FALSE)
+  smoker_rates <- read.csv("srates.csv", stringsAsFactors = FALSE)
+  
+  # Filter active policies for the year
+  active_policies <- policies[
+    policies$inception.year <= sim_year & (is.na(policies$year.of.exit) | policies$year.of.exit >= sim_year), 
+  ]
+  
+  if(nrow(active_policies) == 0) return(data.frame())  # No active policies
+  
+  # Compute age in the simulation year
+  active_policies$age <- active_policies$age.at.inception + (sim_year - active_policies$inception.year)
+  
+  # Combine first and last name
+  active_policies$full_name <- paste(active_policies$first.name, active_policies$surname)
+  
+  # Finding the corresponding mortality for each policyholder
+  age_match <- match(active_policies$age, mortality_table$Age)
+  active_policies$base_mortality <- ifelse(
+    active_policies$sex == "Male",
+    mortality_table$Male[age_match],
+    mortality_table$Female[age_match]
+  )
+  
+  # Smoking adjustment matrix
+  smoke_adj <- matrix(c(
+    smoker_rates$Non.smoker[smoker_rates$Gender=="Male"], smoker_rates$Smoker[smoker_rates$Gender=="Male"], smoker_rates$Ex.Smoker[smoker_rates$Gender=="Male"],
+    smoker_rates$Non.smoker[smoker_rates$Gender=="Female"], smoker_rates$Smoker[smoker_rates$Gender=="Female"], smoker_rates$Ex.Smoker[smoker_rates$Gender=="Female"]
+  ), nrow=2, byrow=TRUE)
+  
+  sex_index <- ifelse(active_policies$sex=="Male", 1, 2)
+  smoke_index <- match(active_policies$smoker.status, c("Non-smoker","Smoker","Ex-smoker"))
+  
+  # Applying the smoking adjustment to the base mortality rates
+  active_policies$adjusted_mortality <- active_policies$base_mortality * smoke_adj[cbind(sex_index, smoke_index)]
+  
+  # Simulate deaths in the given year
+  active_policies$died <- rbinom(nrow(active_policies), 1, active_policies$adjusted_mortality)
+  
+  # Output table for policyholders who died in the year
+  death_records <- active_policies[active_policies$died == 1, 
+                                   c("policy.number", "full_name", "age", "smoker.status", "sum.assured")]
+  colnames(death_records) <- c("Policy Number", "Name", "Age at Death", "Smoking Status", "Sum Assured")
+  
+  return(death_records)
 }
 
 
