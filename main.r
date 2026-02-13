@@ -15,7 +15,7 @@ check_policy_errors <- function(file_path, write_csv = TRUE, output_file = "poli
   )
   
   # Allowed smoking statuses
-  valid_smoking <- c("Smoker", "Non-smoker")
+  valid_smoking <- c("Smoker", "Non-smoker", "Ex-smoker")
   
   # Loop through each policy
   for (i in 1:nrow(policy_data)) {
@@ -433,4 +433,5 @@ policy_cashflows <- function(policy.number, year, interest.rate,
     stringsAsFactors = FALSE
   )
 }
+
 
