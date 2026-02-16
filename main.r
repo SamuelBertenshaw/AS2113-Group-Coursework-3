@@ -421,17 +421,13 @@ simulate_deaths <- function(sim_year, policy_file) {
   smoker_rates   <- read.csv("srates.csv", stringsAsFactors = FALSE)
   
   # Keep only policies active in the simulation year
-  active_policies <- policies[
-    policies$inception.year <= sim_year &
-      (is.na(policies$year.of.exit) | policies$year.of.exit >= sim_year), ]
+  active_policies <- policies[policies$inception.year <= sim_year & (is.na(policies$year.of.exit) | policies$year.of.exit >= sim_year), ]
   
   if (nrow(active_policies) == 0) return(data.frame())
   
   # Age in the simulation year (everyone born 1 Jan)
-  active_policies$age       <- active_policies$age.at.inception +
-    (sim_year - active_policies$inception.year)
-  active_policies$full_name <- paste(active_policies$first.name,
-                                     active_policies$surname)
+  active_policies$age       <- active_policies$age.at.inception + (sim_year - active_policies$inception.year)
+  active_policies$full_name <- paste(active_policies$first.name, active_policies$surname)
   
   # Look up base mortality by age and sex
   age_match <- match(active_policies$age, mortality_table$Age)
@@ -451,13 +447,13 @@ simulate_deaths <- function(sim_year, policy_file) {
     smoker_rates$Ex.Smoker[smoker_rates$Gender == "Female"]
   ), nrow = 2, byrow = TRUE)
   
-  sex_idx   <- ifelse(active_policies$sex == "Male", 1, 2)
-  smoke_idx <- match(active_policies$smoker.status,
+  sex_pol   <- ifelse(active_policies$sex == "Male", 1, 2)
+  smoke_pol <- match(active_policies$smoker.status,
                      c("Non-smoker", "Smoker", "Ex-smoker"))
   
   # Apply smoking multiplier to base mortality
   active_policies$adjusted_mortality <- active_policies$base_mortality *
-    smoke_adj[cbind(sex_idx, smoke_idx)]
+    smoke_adj[cbind(sex_pol, smoke_pol)]
   
   # Simulate deaths: 1 = died, 0 = survived
   active_policies$died <- rbinom(nrow(active_policies), 1,
@@ -470,6 +466,7 @@ simulate_deaths <- function(sim_year, policy_file) {
                                "Smoking Status", "Sum Assured")
   death_records
 }
+
 
 
 
